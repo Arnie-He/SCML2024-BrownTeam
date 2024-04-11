@@ -44,8 +44,12 @@ def run(
     ]
     print(winners)
     if competition == "oneshot":
-        # competitors = list(competitors) + [RandomOneShotAgent, SyncRandomOneShotAgent] + winners
-        competitors = list(competitors) + winners
+        competitors = (
+            list(competitors)
+            + [RandomOneShotAgent, SyncRandomOneShotAgent]
+            + winners[1:3]
+        )
+        # competitors = list(competitors) + winners
     else:
         competitors = list(competitors) + [SyncRandomStdAgent, RandomOneShotAgent]
 

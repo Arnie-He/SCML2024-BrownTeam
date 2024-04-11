@@ -151,11 +151,13 @@ class MyAgent(OneShotSyncAgent):
         mn, mx = 0, self.awi.n_lines // 2
         return mn + (mx - mn) * (r**4.0)
 
-    def best_subset(self, needs, all_partners, offers, partners, plist):
+    def best_subset(
+        self, needs, all_partners, offers, partners, plist, quantity_cost_tradeoff=0.90
+    ):
 
         best_total_los = float("inf")
         best_quantity_diff, best_indx = float("inf"), -1
-        quantity_cost_tradeoff = 0.9  ### toggle this to adjust the tradeoff!
+        # quantity_cost_tradeoff = 0.90  ### toggle this to adjust the tradeoff!
         for i, partner_ids in enumerate(plist):
 
             # Calculate quantity
@@ -183,21 +185,22 @@ class MyAgent(OneShotSyncAgent):
                     if offered_quantity < needs:
                         # shortfall
                         cost += diff * self.awi.current_shortfall_penalty
-                    else:
+                    if offered_quantity > needs:
                         cost += diff * self.awi.current_disposal_cost
 
             loss = quantity_cost_tradeoff * diff + (1 - quantity_cost_tradeoff) * cost
 
             if loss < best_total_los:
                 best_quantity_diff, best_indx = diff, i
+                best_total_los = loss
 
         return best_quantity_diff, best_indx
 
     def counter_all(self, offers, states):
-        if self.verbose:
-            print("A new round of countering begins:")
-            for state in states:
-                print(f"State is in step{states[state].step}")
+        # if self.verbose:
+        #     print("A new round of countering begins:")
+        #     for state in states:
+        #         print(f"State is in step{states[state].step}")
 
         response = dict()
         # process for sales and supplies independently
@@ -217,12 +220,44 @@ class MyAgent(OneShotSyncAgent):
             price = issues[UNIT_PRICE].rand()
             # find active partners
             partners = {_ for _ in all_partners if _ in offers.keys()}
+
+            # Update partner's wanted price history
+            for partner in list(partners):
+                if partner not in self.partner_price_history:
+                    self.partner_price_history = [offers[partner][UNIT_PRICE]]
+                else:
+                    self.partner_price_history.append([offers[partner][UNIT_PRICE]])
+
             # find the set of partners that gave me the best offer set
             # (i.e. total quantity nearest to my needs)
             plist = list(powerset(partners))
             best_diff, best_indx = self.best_subset(
                 needs, all_partners, offers, partners, plist
             )
+
+            # if len(partners) != 0:
+            #     partners_list = list(partners)
+            #     partner_id = partners_list[0]
+            #     n_steps = self.awi.current_nmis[partner_id].n_steps
+            #     last_round = states[partner_id].step == n_steps - 1
+            #     if last_round:
+            #         best_diff, best_indx = self.best_subset(
+            #             needs,
+            #             all_partners,
+            #             offers,
+            #             partners,
+            #             plist,
+            #             quantity_cost_tradeoff=1,
+            #         )
+            #         partner_ids = plist[best_indx]
+            #         others = list(partners.difference(partner_ids))
+            #         response |= {
+            #             k: SAOResponse(ResponseType.ACCEPT_OFFER, offers[k])
+            #             for k in partner_ids
+            #         } | {
+            #             k: SAOResponse(ResponseType.END_NEGOTIATION, None)
+            #             for k in others
+            #         }
 
             # If the best combination of offers is good enough, accept them and end all
             # other negotiations
@@ -232,40 +267,43 @@ class MyAgent(OneShotSyncAgent):
             if best_diff <= th:
                 partner_ids = plist[best_indx]
                 others = list(partners.difference(partner_ids))
-                # capacity = []
-                # for other in others:
-                #     capacity.append(offers[other][QUANTITY])
-                # if self.verbose:
-                #     print(f"Capacity:{capacity}")
-                # distribution = distribute_goods(best_diff, capacity)
-                # dict_response = dict()
-                # for i, other in enumerate(others):
-                #     dict_response[other] = distribution[i]
+
+                capacity = []
+                for other in others:
+                    capacity.append(offers[other][QUANTITY])
+                if self.verbose and len(others) > 0:
+                    print(f"Capacity:{capacity}")
+                distribution = distribute_goods(best_diff, capacity)
+                dict_response = dict()
+                for i, other in enumerate(others):
+                    dict_response[other] = distribution[i]
+
                 response |= {
                     k: SAOResponse(ResponseType.ACCEPT_OFFER, offers[k])
                     for k in partner_ids
                 } | {
-                    # k: SAOResponse(
-                    #     ResponseType.REJECT_OFFER, (q, self.awi.current_step, price)
-                    # )
-                    # for k, q in dict_response.items()
-                    k: SAOResponse(ResponseType.END_NEGOTIATION, None)
-                    for k in others
+                    k: SAOResponse(
+                        ResponseType.REJECT_OFFER,
+                        (q, self.awi.current_step, offers[k][UNIT_PRICE]),
+                    )
+                    for k, q in dict_response.items()
+                    # k: SAOResponse(ResponseType.END_NEGOTIATION, None)
+                    # for k in others
                 }
                 continue
 
             # If I still do not have a good enough offer, distribute my current needs
             # randomly over my partners.
 
-            # capacity = []
-            # for partner in partners:
-            #     capacity.append(offers[partner][QUANTITY])
-            # distribution = distribute_goods(needs, capacity)
-            # dict_response = dict()
-            # for i, partner in enumerate(partners):
-            #     dict_response[partner] = distribution[i]
+            capacity = []
+            for partner in partners:
+                capacity.append(offers[partner][QUANTITY])
+            distribution = distribute_goods(needs, capacity)
+            dict_response = dict()
+            for i, partner in enumerate(partners):
+                dict_response[partner] = distribution[i]
 
-            dict_response = self.distribute_needs(match_history=False)
+            # dict_response = self.distribute_needs(match_history=False)
 
             response.update(
                 {
@@ -273,7 +311,8 @@ class MyAgent(OneShotSyncAgent):
                         SAOResponse(ResponseType.END_NEGOTIATION, None)
                         if q == 0
                         else SAOResponse(
-                            ResponseType.REJECT_OFFER, (q, self.awi.current_step, price)
+                            ResponseType.REJECT_OFFER,
+                            (q, self.awi.current_step, offers[k][UNIT_PRICE]),
                         )
                     )
                     for k, q in dict_response.items()
@@ -293,6 +332,8 @@ class MyAgent(OneShotSyncAgent):
             self.partners = self.awi.my_consumers
         else:
             self.partners = self.awi.my_suppliers
+
+        self.partner_price_history = dict()
 
     def before_step(self):
         """Called at at the BEGINNING of every production step (day)"""
@@ -316,6 +357,7 @@ class MyAgent(OneShotSyncAgent):
             print(
                 f" Current disposal cost = {self.awi.current_disposal_cost}. Current shortfall cost = {self.awi.current_shortfall_penalty}"
             )
+            print(f"My partners are {self.partners}")
 
     def step(self):
         """Called at at the END of every production step (day)"""
