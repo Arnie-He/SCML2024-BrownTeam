@@ -2,7 +2,12 @@ import time
 
 from negmas.helpers import humanize_time
 from rich import print
-from scml.oneshot.agents import RandomOneShotAgent, SyncRandomOneShotAgent
+from scml.oneshot.agents import (
+    RandomOneShotAgent,
+    SyncRandomOneShotAgent,
+    SingleAgreementAspirationAgent,
+    GreedySyncAgent,
+)
 from scml.std.agents import SyncRandomStdAgent
 from scml_agents import get_agents
 from scml.utils import anac2024_oneshot, anac2024_std
@@ -40,14 +45,17 @@ def run(
     """
     winners = [
         get_agents(y, track="oneshot", winners_only=True, as_class=False)[0]
-        for y in (2020, 2021, 2022, 2023)
+        for y in (2021, 2022, 2023)
     ]
     print(winners)
     if competition == "oneshot":
         competitors = (
             list(competitors)
-            # + [RandomOneShotAgent, SyncRandomOneShotAgent]
-            + winners[0:3]
+            + [
+                GreedySyncAgent,
+                SingleAgreementAspirationAgent,
+            ]
+            + winners[1:3]
         )
         # competitors = list(competitors) + winners
     else:

@@ -284,7 +284,11 @@ class MyAgent(OneShotSyncAgent):
                 } | {
                     k: SAOResponse(
                         ResponseType.REJECT_OFFER,
-                        (q, self.awi.current_step, offers[k][UNIT_PRICE]),
+                        (
+                            q,
+                            self.awi.current_step,
+                            offers[k][UNIT_PRICE],
+                        ),  #  self.best_price,
                     )
                     for k, q in dict_response.items()
                     # k: SAOResponse(ResponseType.END_NEGOTIATION, None)
@@ -325,7 +329,7 @@ class MyAgent(OneShotSyncAgent):
     # =====================
 
     def init(self):
-        self.verbose = True
+        self.verbose = False
         self.first = True
         """Called once after the agent-world interface is initialized"""
         if self.awi.level == 0:
