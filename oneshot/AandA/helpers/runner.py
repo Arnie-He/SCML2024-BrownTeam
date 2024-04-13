@@ -51,11 +51,7 @@ def run(
     if competition == "oneshot":
         competitors = (
             list(competitors)
-            + [
-                GreedySyncAgent,
-                SingleAgreementAspirationAgent,
-            ]
-            + winners[1:3]
+            + winners
         )
         # competitors = list(competitors) + winners
     else:
