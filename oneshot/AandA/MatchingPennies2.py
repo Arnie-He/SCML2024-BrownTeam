@@ -183,6 +183,9 @@ class MyAgent(OneShotSyncAgent):
             # Surplus Penalty
             if offered_quantity > needs + 1:
                 continue
+            # elif offered_quantity == needs:
+            #     best_quantity_diff, best_indx = diff, i
+            #     break
 
             max_utility, min_utility = self.ufun.max_utility, self.ufun.min_utility
             max_diff, min_diff = needs, 0
@@ -218,6 +221,7 @@ class MyAgent(OneShotSyncAgent):
 
     def counter_all(self, offers, states):
         response = dict()
+        self.negotiation_steps += 1
         # process for sales and supplies independently
         for needs, all_partners, issues in [
             (
@@ -232,10 +236,20 @@ class MyAgent(OneShotSyncAgent):
             ),
         ]:
             # get a random price
-            # price = issues[UNIT_PRICE].rand()
+            price = issues[UNIT_PRICE].rand()
 
             # find active partners
             partners = {_ for _ in all_partners if _ in offers.keys()}
+            total_offer_quant = sum(offers[p][QUANTITY] for p in list(partners))
+
+            self.expected_contract_quantity[
+                self.negotiation_steps
+            ] *= self.expected_contract_step[self.negotiation_steps]
+            self.expected_contract_step[self.negotiation_steps] += 1
+            self.expected_contract_quantity[self.negotiation_steps] += total_offer_quant
+            self.expected_contract_quantity[
+                self.negotiation_steps
+            ] /= self.expected_contract_step[self.negotiation_steps]
 
             # Update partner's wanted price history
             for partner in list(partners):
@@ -255,18 +269,41 @@ class MyAgent(OneShotSyncAgent):
                 quantity_cost_tradeoff=(1.0 - self.q / 100),
             )
 
-            # determine if last round:
-            # if len(partners) != 0:
-            #     partners_list = list(partners)
-            #     partner_id = partners_list[0]
-            #     n_steps = self.awi.running_nmis[partner_id].n_steps
-            #     last_round = states[partner_id].step == n_steps- 1 if n_steps is None else None
-
-            #     if(last_round):
-            #         print("LASTROUND: ")
-
             partner_ids = plist[best_indx]
             others = list(partners.difference(partner_ids))
+
+            if (sum(offers[p][QUANTITY] for p in partner_ids) > (needs + 1)) or (
+                best_diff < needs
+                and best_diff > needs / 2
+                and needs >= 4
+                and total_offer_quant >= needs * 1.5
+                and (
+                    self.expected_contract_quantity[self.negotiation_steps + 1] >= needs
+                    or self.days <= 4
+                )
+            ):
+                # Renegotiate
+                capacity = []
+                for partner in list(partners):
+                    capacity.append(offers[partner][QUANTITY])
+                distribution = distribute_goods(best_diff, capacity)
+                dict_response = dict()
+                for i, partner in enumerate(list(partners)):
+                    dict_response[partner] = distribution[i]
+                response |= {
+                    k: SAOResponse(
+                        ResponseType.REJECT_OFFER,
+                        (
+                            q,
+                            self.awi.current_step,
+                            self.best_price,
+                            #  if best_diff > 1 else offers[k][UNIT_PRICE],
+                        ),  #  self.best_price, offers[k][UNIT_PRICE]
+                    )
+                    for k, q in dict_response.items()
+                    # k: SAOResponse(ResponseType.END_NEGOTIATION, None)
+                    # for k in others
+                }
 
             capacity = []
             for other in others:
@@ -285,6 +322,7 @@ class MyAgent(OneShotSyncAgent):
                     (
                         q,
                         self.awi.current_step,
+                        # self.best_price if best_diff > 1 else offers[k][UNIT_PRICE],
                         self.best_price if best_diff > 1 else offers[k][UNIT_PRICE],
                     ),  #  self.best_price, offers[k][UNIT_PRICE]
                 )
@@ -304,6 +342,9 @@ class MyAgent(OneShotSyncAgent):
 
         self.verbose = True
         self.first = True
+        self.days = 0
+        self.expected_contract_quantity = [0] * 25
+        self.expected_contract_step = [0] * 25
 
         if self.awi.level == 0:
             self.partners = self.awi.my_consumers
@@ -316,6 +357,8 @@ class MyAgent(OneShotSyncAgent):
         """Called at at the BEGINNING of every production step (day)"""
         self.ufun.find_limit(True)
         self.ufun.find_limit(False)
+
+        self.negotiation_steps = 0
 
         if self.awi.level == 0:
             self.q = self.awi.current_exogenous_input_quantity
@@ -337,6 +380,7 @@ class MyAgent(OneShotSyncAgent):
         self.todays_contracts_num = 0
         self.todays_spent = 0
         self.contracts = []
+        self.days += 1
 
         # if self.verbose:
         #     print(

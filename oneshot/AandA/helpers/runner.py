@@ -7,6 +7,7 @@ from scml.oneshot.agents import (
     SyncRandomOneShotAgent,
     SingleAgreementAspirationAgent,
     GreedySyncAgent,
+    RandDistOneShotAgent,
 )
 from scml.std.agents import SyncRandomStdAgent
 from scml_agents import get_agents
@@ -51,7 +52,8 @@ def run(
     if competition == "oneshot":
         competitors = (
             list(competitors)
-            + winners
+            + [SyncRandomOneShotAgent, RandDistOneShotAgent]
+            + winners[1:3]
         )
         # competitors = list(competitors) + winners
     else:
