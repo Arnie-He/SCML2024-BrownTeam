@@ -275,7 +275,8 @@ class MyAgent(OneShotSyncAgent):
             if (sum(offers[p][QUANTITY] for p in partner_ids) > (needs + 1)) or (
                 best_diff < needs
                 and best_diff > needs / 2
-                and needs >= 4
+                and needs > 3
+                and self.q >= 6
                 and total_offer_quant >= needs * 1.5
                 and (
                     self.expected_contract_quantity[self.negotiation_steps + 1] >= needs
@@ -408,6 +409,7 @@ class MyAgent(OneShotSyncAgent):
             print(
                 f"Today's exorgenous contracts are at {self.p/self.q} for each of the {self.q} items"
             )
+            print(f"Expected quantities: {self.expected_contract_quantity}")
 
     # ================================
     # Negotiation Control and Feedback
